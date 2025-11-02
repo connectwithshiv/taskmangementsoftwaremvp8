@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Existing Tasks - Add Worksheet Support</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button.success {
+            background: #10b981;
+        }
+        button.danger {
+            background: #ef4444;
+        }
+        .output {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 6px;
+        }
+        .status.info { background: #dbeafe; color: #1e40af; }
+        .status.success { background: #d1fae5; color: #065f46; }
+        .status.error { background: #fee2e2; color: #991b1b; }
+        .warning { background: #fef3c7; color: #92400e; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        select, input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 100%;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix Existing Tasks - Add Worksheet Support</h1>
+        <p class="subtitle">This tool adds worksheet functionality to your existing tasks</p>
+
+        <div class="warning">
+            ⚠️ <strong>Important:</strong> Make sure your main app is running in another tab. This tool reads from the same localStorage.
+        </div>
+
+        <!-- Step 1: Check Current Status -->
+        <div class="section">
+            <h3>Step 1: Check Current Status</h3>
+            <button onclick="checkStatus()">🔍 Check System Status</button>
+            <div id="status-output" class="output" style="display:none;"></div>
+        </div>
+
+        <!-- Step 2: List Tasks -->
+        <div class="section">
+            <h3>Step 2: View All Tasks</h3>
+            <button onclick="listTasks()">📋 List All Tasks</button>
+            <div id="tasks-output" class="output" style="display:none;"></div>
+        </div>
+
+        <!-- Step 3: Auto-Fix Tasks -->
+        <div class="section">
+            <h3>Step 3: Automatically Link Worksheets to Tasks</h3>
+            <p style="color: #666;">This will automatically add worksheet templates to tasks based on their category.</p>
+            <button onclick="autoFixTasks()" class="success">✨ Auto-Fix All Tasks</button>
+            <div id="fix-output" class="output" style="display:none;"></div>
+        </div>
+
+        <!-- Step 4: Manual Fix -->
+        <div class="section">
+            <h3>Step 4: Manually Assign Worksheet to Task (Optional)</h3>
+            <label>Select Task:</label>
+            <select id="task-select" onchange="loadTaskDetails()">
+                <option value="">-- Select a Task --</option>
+            </select>
+            
+            <label>Select Worksheet Template:</label>
+            <select id="template-select">
+                <option value="">-- Select Template --</option>
+            </select>
+            
+            <button onclick="manualAssign()">🔗 Assign Worksheet to Task</button>
+            <div id="manual-output" class="output" style="display:none;"></div>
+        </div>
+
+        <!-- Step 5: Verify -->
+        <div class="section">
+            <h3>Step 5: Verify Changes</h3>
+            <button onclick="verifyChanges()">✅ Verify All Changes</button>
+            <div id="verify-output" class="output" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Load data functions
+        function getTasks() {
+            const data = localStorage.getItem('taskManagement_tasks');
+            if (!data) return [];
+            try {
+                const parsed = JSON.parse(data);
+                return parsed.tasks || [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveTasks(tasks) {
+            localStorage.setItem('taskManagement_tasks', JSON.stringify({ tasks }));
+        }
+
+        function getTemplates() {
+            const data = localStorage.getItem('worksheetTemplates');
+            if (!data) return [];
+            try {
+                return JSON.parse(data);
+            } catch {
+                return [];
+            }
+        }
+
+        function getCategories() {
+            const data = localStorage.getItem('taskManagement_categories');
+            if (!data) return [];
+            try {
+                return JSON.parse(data);
+            } catch {
+                return [];
+            }
+        }
+
+        // Step 1: Check Status
+        function checkStatus() {
+            const output = document.getElementById('status-output');
+            output.style.display = 'block';
+            
+            const tasks = getTasks();
+            const templates = getTemplates();
+            const categories = getCategories();
+            
+            const tasksWithWorksheet = tasks.filter(t => t.hasWorksheet);
+            const tasksWithoutWorksheet = tasks.filter(t => !t.hasWorksheet);
+            
+            output.innerHTML = `
+=== SYSTEM STATUS ===
+✓ Total Tasks: ${tasks.length}
+✓ Total Worksheet Templates: ${templates.length}
+✓ Total Categories: ${categories.length}
+
+📊 Task Breakdown:
+  • Tasks WITH worksheet: ${tasksWithWorksheet.length}
+  • Tasks WITHOUT worksheet: ${tasksWithoutWorksheet.length}
+
+📋 Templates by Category:
+${templates.map(t => {
+    const cat = categories.find(c => c.id === t.categoryId);
+    return `  • ${t.name} → ${cat ? cat.name : 'Unknown Category'}`;
+}).join('\n') || '  (No templates found)'}
+
+${tasksWithoutWorksheet.length > 0 ? 
+`⚠️ ${tasksWithoutWorksheet.length} tasks need worksheet support added!` : 
+`✅ All tasks have worksheet support!`}
+            `;
+        }
+
+        // Step 2: List Tasks
+        function listTasks() {
+            const output = document.getElementById('tasks-output');
+            output.style.display = 'block';
+            
+            const tasks = getTasks();
+            const categories = getCategories();
+            
+            if (tasks.length === 0) {
+                output.innerHTML = '⚠️ No tasks found in localStorage';
+                return;
+            }
+            
+            output.innerHTML = `
+=== ALL TASKS ===
+Total: ${tasks.length}
+
+${tasks.map((task, i) => {
+    const cat = categories.find(c => c.id === task.categoryId);
+    return `
+[${i + 1}] ${task.title}
+    ID: ${task.id}
+    Category: ${cat ? cat.name : 'Unknown'} (${task.categoryId})
+    Status: ${task.status}
+    Has Worksheet: ${task.hasWorksheet ? '✅ YES' : '❌ NO'}
+    Template ID: ${task.worksheetTemplateId || 'none'}
+    Assigned To: ${task.assignedToName || task.assignedTo}
+    `;
+}).join('\n---\n')}
+            `;
+            
+            // Populate dropdown
+            const select = document.getElementById('task-select');
+            select.innerHTML = '<option value="">-- Select a Task --</option>';
+            tasks.forEach(task => {
+                const option = document.createElement('option');
+                option.value = task.id;
+                option.textContent = task.title;
+                select.appendChild(option);
+            });
+        }
+
+        // Step 3: Auto-Fix Tasks
+        function autoFixTasks() {
+            const output = document.getElementById('fix-output');
+            output.style.display = 'block';
+            
+            const tasks = getTasks();
+            const templates = getTemplates();
+            const categories = getCategories();
+            
+            if (templates.length === 0) {
+                output.innerHTML = '❌ ERROR: No worksheet templates found!\n\nPlease create worksheet templates first in the admin panel.';
+                return;
+            }
+            
+            let log = '=== AUTO-FIX PROCESS ===\n\n';
+            let fixedCount = 0;
+            let skippedCount = 0;
+            
+            tasks.forEach((task, index) => {
+                // Find template for this task's category
+                const template = templates.find(t => t.categoryId === task.categoryId);
+                const category = categories.find(c => c.id === task.categoryId);
+                
+                if (template) {
+                    if (!task.hasWorksheet || !task.worksheetTemplateId) {
+                        // Add worksheet support
+                        task.hasWorksheet = true;
+                        task.worksheetTemplateId = template.id;
+                        if (!task.worksheetSubmissions) {
+                            task.worksheetSubmissions = [];
+                        }
+                        
+                        log += `✅ [${index + 1}] ${task.title}\n`;
+                        log += `   Category: ${category ? category.name : 'Unknown'}\n`;
+                        log += `   Template: ${template.name}\n`;
+                        log += `   Action: Added worksheet support\n\n`;
+                        fixedCount++;
+                    } else {
+                        log += `⏭️  [${index + 1}] ${task.title}\n`;
+                        log += `   Already has worksheet support\n\n`;
+                        skippedCount++;
+                    }
+                } else {
+                    log += `⚠️  [${index + 1}] ${task.title}\n`;
+                    log += `   Category: ${category ? category.name : 'Unknown'}\n`;
+                    log += `   No template found for this category\n\n`;
+                    skippedCount++;
+                }
+            });
+            
+            // Save changes
+            saveTasks(tasks);
+            
+            log += `\n=== SUMMARY ===\n`;
+            log += `✅ Fixed: ${fixedCount} tasks\n`;
+            log += `⏭️  Skipped: ${skippedCount} tasks\n`;
+            log += `\n🎉 Changes saved! Refresh your app to see the results.`;
+            
+            output.innerHTML = log;
+        }
+
+        // Load task details for manual assignment
+        function loadTaskDetails() {
+            const taskId = document.getElementById('task-select').value;
+            if (!taskId) return;
+            
+            const tasks = getTasks();
+            const task = tasks.find(t => t.id === taskId);
+            
+            // Populate template dropdown
+            const templates = getTemplates();
+            const templateSelect = document.getElementById('template-select');
+            templateSelect.innerHTML = '<option value="">-- Select Template --</option>';
+            
+            templates.forEach(template => {
+                const option = document.createElement('option');
+                option.value = template.id;
+                option.textContent = template.name;
+                if (task.worksheetTemplateId === template.id) {
+                    option.selected = true;
+                }
+                templateSelect.appendChild(option);
+            });
+        }
+
+        // Manual assignment
+        function manualAssign() {
+            const output = document.getElementById('manual-output');
+            output.style.display = 'block';
+            
+            const taskId = document.getElementById('task-select').value;
+            const templateId = document.getElementById('template-select').value;
+            
+            if (!taskId || !templateId) {
+                output.innerHTML = '❌ ERROR: Please select both a task and a template';
+                return;
+            }
+            
+            const tasks = getTasks();
+            const templates = getTemplates();
+            
+            const task = tasks.find(t => t.id === taskId);
+            const template = templates.find(t => t.id === templateId);
+            
+            if (!task || !template) {
+                output.innerHTML = '❌ ERROR: Task or template not found';
+                return;
+            }
+            
+            // Update task
+            task.hasWorksheet = true;
+            task.worksheetTemplateId = templateId;
+            if (!task.worksheetSubmissions) {
+                task.worksheetSubmissions = [];
+            }
+            
+            // Save
+            saveTasks(tasks);
+            
+            output.innerHTML = `
+✅ SUCCESS!
+
+Task: ${task.title}
+Template: ${template.name}
+
+Worksheet has been assigned to the task.
+Refresh your app to see the changes.
+            `;
+        }
+
+        // Verify changes
+        function verifyChanges() {
+            const output = document.getElementById('verify-output');
+            output.style.display = 'block';
+            
+            const tasks = getTasks();
+            const templates = getTemplates();
+            
+            const tasksWithWorksheet = tasks.filter(t => t.hasWorksheet && t.worksheetTemplateId);
+            const tasksWithInvalidTemplate = tasks.filter(t => {
+                if (!t.hasWorksheet) return false;
+                return !templates.find(template => template.id === t.worksheetTemplateId);
+            });
+            
+            output.innerHTML = `
+=== VERIFICATION RESULTS ===
+
+✅ Tasks with valid worksheet: ${tasksWithWorksheet.length}
+❌ Tasks with invalid template: ${tasksWithInvalidTemplate.length}
+
+${tasksWithWorksheet.length > 0 ? `
+📋 Tasks with Worksheets:
+${tasksWithWorksheet.map(t => {
+    const template = templates.find(tpl => tpl.id === t.worksheetTemplateId);
+    return `  ✓ ${t.title} → ${template ? template.name : 'Unknown Template'}`;
+}).join('\n')}
+` : ''}
+
+${tasksWithInvalidTemplate.length > 0 ? `
+⚠️ Tasks with Invalid Templates:
+${tasksWithInvalidTemplate.map(t => `  • ${t.title} (Template ID: ${t.worksheetTemplateId})`).join('\n')}
+` : ''}
+
+${tasksWithWorksheet.length > 0 ? 
+'🎉 Everything looks good! Your tasks are ready for worksheet submission.' : 
+'⚠️ No tasks have worksheet support yet. Run Auto-Fix to add them.'}
+            `;
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>
+
