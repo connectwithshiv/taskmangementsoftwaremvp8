@@ -23,6 +23,7 @@ const TaskReviewModal = ({
   const [submission, setSubmission] = useState(null);
   const [adminChecklist, setAdminChecklist] = useState({});
   const [feedback, setFeedback] = useState('');
+  const [mistakesFound, setMistakesFound] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
@@ -77,13 +78,13 @@ const TaskReviewModal = ({
   // Handle approve
   const handleApprove = async () => {
     setIsProcessing(true);
-    
+
     const approvedChecklistItems = checklist?.items
       ? checklist.items.map(item => item.id)
       : [];
 
-    await onApprove(approvedChecklistItems, feedback);
-    
+    await onApprove(approvedChecklistItems, feedback, mistakesFound);
+
     setIsProcessing(false);
   };
 
@@ -316,11 +317,41 @@ const TaskReviewModal = ({
                 className="mb-4"
               />
             )}
-            
+
+            {/* Mistakes Counter */}
+            {task.checkerId && (
+              <div className="mb-4">
+                <label
+                  htmlFor="mistakesFound"
+                  className={`block text-sm font-semibold mb-2 ${
+                    isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}
+                >
+                  Mistakes Found (for checker earning calculation):
+                </label>
+                <input
+                  id="mistakesFound"
+                  type="number"
+                  min="0"
+                  value={mistakesFound}
+                  onChange={(e) => setMistakesFound(parseInt(e.target.value) || 0)}
+                  className={`w-full px-4 py-3 rounded-lg border ${
+                    isDarkMode
+                      ? 'bg-slate-700 border-slate-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-900'
+                  } focus:ring-2 focus:ring-yellow-500 focus:outline-none`}
+                  placeholder="Enter number of mistakes found..."
+                />
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  This will be used to calculate the checker's earning based on the rate configuration
+                </p>
+              </div>
+            )}
+
             <textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              placeholder={allItemsApproved 
+              placeholder={allItemsApproved
                 ? "Add optional feedback for the user (optional if approving)..."
                 : "Add feedback (optional) or submit to require corrections based on unchecked items..."
               }

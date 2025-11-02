@@ -251,11 +251,11 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
   };
 
   // Handle approve task
-  const handleApproveTask = async (approvedChecklistItems, feedback) => {
+  const handleApproveTask = async (approvedChecklistItems, feedback, mistakesFound = 0) => {
     try {
       const adminId = localStorage.getItem('admin_id') || 'admin';
-      const result = TaskService.approveTask(taskForReview.id, adminId, feedback);
-      
+      const result = TaskService.approveTask(taskForReview.id, adminId, feedback, null, mistakesFound);
+
       if (result.success) {
         loadData();
         setShowReviewModal(false);

@@ -1,4 +1,5 @@
 import { USER_STATUS, USER_ACTIONS } from '../utils/constants';
+import walletService from './walletService';
 
 const STORAGE_KEYS = {
   USERS: 'userData',
@@ -232,11 +233,15 @@ class UserService {
 
       // ✅ Sync to auth system (will use same ID)
       const authId = this.syncUserToAuthSystem(newUser);
-      
+
       console.log('✅ User synced to auth system:');
       console.log('   user_id:', newUser.user_id);
       console.log('   auth_id:', authId);
       console.log('   Match:', newUser.user_id === authId ? '✅ YES' : '❌ NO');
+
+      // ✅ Initialize wallet for new user
+      const wallet = walletService.getWallet(newUser.user_id);
+      console.log('✅ Wallet initialized for user:', newUser.user_id, 'Balance:', wallet.balance);
 
       users.push(newUser);
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
@@ -684,6 +689,27 @@ class UserService {
       localStorage.setItem(STORAGE_KEYS.USER_FIELD_VALUES, JSON.stringify(filteredValues));
     } catch (error) {
       console.error('Error deleting user field values:', error);
+    }
+  }
+
+  // Initialize wallets for all existing users
+  initializeWalletsForAllUsers() {
+    try {
+      const users = this.getAllUsers();
+      let initializedCount = 0;
+
+      users.forEach(user => {
+        if (user.user_id) {
+          walletService.getWallet(user.user_id);
+          initializedCount++;
+        }
+      });
+
+      console.log(`✅ Initialized wallets for ${initializedCount} users`);
+      return { success: true, count: initializedCount };
+    } catch (error) {
+      console.error('Error initializing wallets:', error);
+      return { success: false, error: error.message };
     }
   }
 }
