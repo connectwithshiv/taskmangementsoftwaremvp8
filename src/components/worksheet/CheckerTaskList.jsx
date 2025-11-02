@@ -135,14 +135,16 @@ const CheckerTaskList = ({
   };
 
   // Handle approve task
-  const handleApproveTask = async (approvedChecklistItems, feedback) => {
+  const handleApproveTask = async (approvedChecklistItems, feedback, mistakesFound = 0) => {
     try {
       const result = await TaskService.approveTask(
         taskForReview.id,
         currentChecker.id || currentChecker.user_id,
-        feedback
+        feedback,
+        null,
+        mistakesFound
       );
-      
+
       if (result.success) {
         alert('✅ Task approved successfully!');
         loadCheckerTasks();

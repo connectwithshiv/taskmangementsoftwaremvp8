@@ -2,6 +2,9 @@ import { StorageService } from "./storageService";
 import { UserIdResolver } from "../components/user/UserIdResolver";
 import UserDependencyService from "./userDependencyService";
 import WorkflowService from "./workflowService";
+import walletService from "./walletService";
+import rateManagerService from "./rateManagerService";
+import categoryService from "./categoryService";
 
 // Task statuses
 export const TASK_STATUS = {
@@ -757,7 +760,7 @@ const TaskService = {
    * Admin reviews and approves task
    * Handles workflow handoff if task is part of a workflow
    */
-  approveTask: (taskId, adminId, adminFeedback = null, outputData = null) => {
+  approveTask: (taskId, adminId, adminFeedback = null, outputData = null, mistakesFound = 0) => {
     try {
       const taskIndex = tasks.findIndex(t => t.id === taskId);
       
@@ -820,7 +823,8 @@ const TaskService = {
               reviewedAt: now,
               reviewedBy: adminId,
               approved: true,
-              adminFeedback: adminFeedback
+              adminFeedback: adminFeedback,
+              mistakesFound: mistakesFound || 0
             },
             logs: [
               ...(task.logs || []),
@@ -832,7 +836,82 @@ const TaskService = {
               }
             ]
           };
-          
+
+          // ✅ Process wallet earnings for workflow completion (current stage)
+          try {
+            const category = categoryService.getCategoryById(task.categoryId);
+            const categoryAmount = parseFloat(category?.amount || 0);
+
+            if (categoryAmount > 0) {
+              // Calculate doer earning
+              const doerEarning = rateManagerService.calculateDoerEarning(
+                task.categoryId,
+                categoryAmount
+              );
+
+              // Add earning to current stage doer
+              if (doerEarning > 0 && task.assignedTo) {
+                const result = walletService.addEarning({
+                  userId: task.assignedTo,
+                  amount: doerEarning,
+                  description: `Workflow stage completion: ${task.title} (Stage ${task.currentStage})`,
+                  relatedId: task.id,
+                  relatedType: 'workflow_stage',
+                  metadata: {
+                    taskId: task.id,
+                    taskTitle: task.title,
+                    categoryId: task.categoryId,
+                    categoryName: task.categoryPath,
+                    categoryAmount: categoryAmount,
+                    stageOrder: task.currentStage,
+                    workflowId: task.workflowId,
+                    approvedBy: adminId,
+                    approvedAt: now
+                  }
+                });
+
+                console.log(`✅ Workflow stage doer earning: ${result.success ? doerEarning : 'Failed'} for user ${task.assignedTo}`);
+              }
+
+              // Calculate checker earning (if checker exists and mistakes recorded)
+              if (task.checkerId && task.review?.mistakesFound !== undefined) {
+                const checkerEarningData = rateManagerService.calculateCheckerEarning(
+                  task.categoryId,
+                  categoryAmount,
+                  task.review.mistakesFound
+                );
+
+                if (checkerEarningData.amount > 0) {
+                  const result = walletService.addEarning({
+                    userId: task.checkerId,
+                    amount: checkerEarningData.amount,
+                    description: `Workflow review: ${task.title} Stage ${task.currentStage} (${checkerEarningData.mistakesFound} mistakes found)`,
+                    relatedId: task.id,
+                    relatedType: 'workflow_review',
+                    metadata: {
+                      taskId: task.id,
+                      taskTitle: task.title,
+                      categoryId: task.categoryId,
+                      categoryName: task.categoryPath,
+                      mistakesFound: checkerEarningData.mistakesFound,
+                      percentagePerMistake: checkerEarningData.percentagePerMistake,
+                      calculation: checkerEarningData.calculation,
+                      stageOrder: task.currentStage,
+                      workflowId: task.workflowId,
+                      approvedBy: adminId,
+                      approvedAt: now
+                    }
+                  });
+
+                  console.log(`✅ Workflow checker earning: ${result.success ? checkerEarningData.amount : 'Failed'} for checker ${task.checkerId}`);
+                }
+              }
+            }
+          } catch (walletError) {
+            console.error('Error processing workflow wallet earnings:', walletError);
+            // Continue with workflow completion even if wallet processing fails
+          }
+
           saveTasks();
           
           return { 
@@ -918,7 +997,8 @@ const TaskService = {
             reviewedAt: now,
             reviewedBy: adminId,
             approved: true,
-            adminFeedback: adminFeedback
+            adminFeedback: adminFeedback,
+            mistakesFound: mistakesFound || 0
           },
           logs: [
             ...(task.logs || []),
@@ -930,6 +1010,78 @@ const TaskService = {
             }
           ]
         };
+
+        // ✅ Process wallet earnings when task is approved
+        try {
+          // Get category to fetch amount
+          const category = categoryService.getCategoryById(task.categoryId);
+          const categoryAmount = parseFloat(category?.amount || 0);
+
+          if (categoryAmount > 0) {
+            // Calculate doer earning
+            const doerEarning = rateManagerService.calculateDoerEarning(
+              task.categoryId,
+              categoryAmount
+            );
+
+            // Add earning to doer wallet
+            if (doerEarning > 0 && task.assignedTo) {
+              const result = walletService.addEarning({
+                userId: task.assignedTo,
+                amount: doerEarning,
+                description: `Task completion: ${task.title}`,
+                relatedId: task.id,
+                relatedType: 'task_approval',
+                metadata: {
+                  taskId: task.id,
+                  taskTitle: task.title,
+                  categoryId: task.categoryId,
+                  categoryName: task.categoryPath,
+                  categoryAmount: categoryAmount,
+                  approvedBy: adminId,
+                  approvedAt: now
+                }
+              });
+
+              console.log(`✅ Doer earning: ${result.success ? doerEarning : 'Failed'} for user ${task.assignedTo}`);
+            }
+
+            // Calculate checker earning (if checker exists and mistakes recorded)
+            if (task.checkerId && task.review?.mistakesFound !== undefined) {
+              const checkerEarningData = rateManagerService.calculateCheckerEarning(
+                task.categoryId,
+                categoryAmount,
+                task.review.mistakesFound
+              );
+
+              if (checkerEarningData.amount > 0) {
+                const result = walletService.addEarning({
+                  userId: task.checkerId,
+                  amount: checkerEarningData.amount,
+                  description: `Task review: ${task.title} (${checkerEarningData.mistakesFound} mistakes found)`,
+                  relatedId: task.id,
+                  relatedType: 'task_review',
+                  metadata: {
+                    taskId: task.id,
+                    taskTitle: task.title,
+                    categoryId: task.categoryId,
+                    categoryName: task.categoryPath,
+                    mistakesFound: checkerEarningData.mistakesFound,
+                    percentagePerMistake: checkerEarningData.percentagePerMistake,
+                    calculation: checkerEarningData.calculation,
+                    approvedBy: adminId,
+                    approvedAt: now
+                  }
+                });
+
+                console.log(`✅ Checker earning: ${result.success ? checkerEarningData.amount : 'Failed'} for checker ${task.checkerId}`);
+              }
+            }
+          }
+        } catch (walletError) {
+          console.error('Error processing wallet earnings:', walletError);
+          // Continue with approval even if wallet processing fails
+        }
 
         saveTasks();
         

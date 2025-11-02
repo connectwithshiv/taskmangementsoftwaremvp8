@@ -295,22 +295,24 @@
 // components/common/Sidebar.jsx - Updated with Worksheet Builder
 
 import React, { useState } from 'react';
-import { 
-  MdMenu, 
-  MdClose, 
-  MdDashboard, 
-  MdShoppingCart, 
-  MdPeople, 
-  MdTaskAlt, 
-  MdAssignment, 
-  MdExpandMore, 
+import {
+  MdMenu,
+  MdClose,
+  MdDashboard,
+  MdShoppingCart,
+  MdPeople,
+  MdTaskAlt,
+  MdAssignment,
+  MdExpandMore,
   MdChevronRight,
   MdLogout,
   MdPerson,
   MdSettings,
   MdDocumentScanner,
   MdBook,
-  MdCheckBox
+  MdCheckBox,
+  MdAccountBalanceWallet,
+  MdAttachMoney
 } from 'react-icons/md';
 
 const AdminSidebar = ({ 
@@ -350,10 +352,30 @@ const AdminSidebar = ({
       icon: MdCheckBox, 
       submenu: [],
     },
-    { 
-      id: 'guidelines', 
-      label: 'Guidelines Builder', 
-      icon: MdBook, 
+    {
+      id: 'guidelines',
+      label: 'Guidelines Builder',
+      icon: MdBook,
+      submenu: [],
+      badge: 'NEW'
+    },
+    {
+      id: 'rate-manager',
+      label: 'Rate Manager',
+      icon: MdAttachMoney,
+      submenu: [],
+      badge: 'NEW'
+    },
+    {
+      id: 'wallet',
+      label: 'My Wallet',
+      icon: MdAccountBalanceWallet,
+      submenu: []
+    },
+    {
+      id: 'admin-wallet-dashboard',
+      label: 'Wallet Dashboard',
+      icon: MdAccountBalanceWallet,
       submenu: [],
       badge: 'NEW'
     },

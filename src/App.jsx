@@ -350,11 +350,15 @@ import WorksheetPage from './pages/WorksheetPage';
 import GuidelinePage from './pages/GuidelinePage';
 import ChecklistPage from './pages/ChecklistPage';
 import WorkflowPage from './pages/WorkflowPage';
+import RateManagerPage from './pages/RateManagerPage';
+import WalletPage from './pages/WalletPage';
+import AdminWalletDashboard from './pages/AdminWalletDashboard';
 import UserApp from './components/user/Userapp';
 import CheckerApp from './components/user/CheckerApp';
 import CategoryService from './services/categoryService';
 import TaskService from './services/taskService';
 import WorksheetService from './services/WorksheetService';
+import userService from './services/userService';
 
 const App = () => {
   // Authentication states
@@ -379,7 +383,14 @@ const App = () => {
     };
 
     checkAuth();
-    
+
+    // Initialize wallets for all existing users
+    try {
+      userService.initializeWalletsForAllUsers();
+    } catch (error) {
+      console.error('Error initializing wallets:', error);
+    }
+
     // Make services available globally for worksheet components
     window.TaskService = TaskService;
     window.WorksheetService = WorksheetService;
@@ -568,6 +579,21 @@ const App = () => {
     // Checklist Builder
     if (currentPage === 'checklists') {
       return <ChecklistPage isDarkMode={isDarkMode} />;
+    }
+
+    // Rate Manager
+    if (currentPage === 'rate-manager') {
+      return <RateManagerPage isDarkMode={isDarkMode} />;
+    }
+
+    // Wallet Management
+    if (currentPage === 'wallet') {
+      return <WalletPage isDarkMode={isDarkMode} />;
+    }
+
+    // Admin Wallet Dashboard
+    if (currentPage === 'admin-wallet-dashboard') {
+      return <AdminWalletDashboard isDarkMode={isDarkMode} />;
     }
 
     // User Dependency
