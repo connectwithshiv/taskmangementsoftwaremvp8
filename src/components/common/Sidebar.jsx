@@ -327,11 +327,16 @@ const AdminSidebar = ({
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: MdDashboard, submenu: [] },
-    { id: 'categories', label: 'Product Service Categories', icon: MdShoppingCart, submenu: [] },
+    { id: 'categories', label: 'Category', icon: MdShoppingCart, submenu: [] },
     { id: 'users', label: 'User Management', icon: MdPeople, submenu: [] },
     { id: 'tasks', label: 'Task Management', icon: MdTaskAlt, submenu: [] },
-    { id: 'user-dependency', label: 'User Dependency', icon: MdAssignment, submenu: [] },
-    { id: 'task-dependency', label: 'Task Dependency', icon: MdAssignment, submenu: [] },
+    {
+      id: 'workflows', 
+      label: 'Task Dependency', 
+      icon: MdAssignment, 
+      submenu: [],
+      badge: 'NEW'
+    },
     { 
       id: 'worksheet-builder', 
       label: 'Worksheet Builder', 
@@ -340,16 +345,15 @@ const AdminSidebar = ({
       badge: 'NEW'
     },
     { 
-      id: 'guidelines', 
-      label: 'Guidelines Builder', 
-      icon: MdBook, 
-      submenu: [],
-      badge: 'NEW'
-    },
-    { 
       id: 'checklists', 
       label: 'Checklist Builder', 
       icon: MdCheckBox, 
+      submenu: [],
+    },
+    { 
+      id: 'guidelines', 
+      label: 'Guidelines Builder', 
+      icon: MdBook, 
       submenu: [],
       badge: 'NEW'
     },

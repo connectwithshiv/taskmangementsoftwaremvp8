@@ -14,7 +14,9 @@ import {
   Clock,
   PlayCircle,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  GitBranch,
+  BarChart3
 } from 'lucide-react';
 import TaskService from '../services/taskService';
 import TaskCard from '../components/task/TaskCard';
@@ -22,16 +24,22 @@ import TaskForm from '../components/task/TaskForm';
 import TaskRow from '../components/task/TaskRow';
 import SubmissionViewer from '../components/worksheet/SubmissionViewer';
 import TaskReviewModal from '../components/task/TaskReviewModal';
+import TaskWorkflowView from '../components/workflow/TaskWorkflowView';
+import WorkflowService from '../services/workflowService';
+import UserDependencyService from '../services/userDependencyService';
 
 const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
   const [tasks, setTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [users, setUsers] = useState([]);
+  const [workflows, setWorkflows] = useState([]);
+  const [dependencies, setDependencies] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // UI State
+  const [activeTab, setActiveTab] = useState('all-tasks'); // 'all-tasks', 'workflows', 'statistics'
   const [viewMode, setViewMode] = useState('card'); // 'card' or 'list'
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -47,7 +55,12 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
     status: 'all',
     priority: 'all',
     categoryId: 'all',
-    assignedTo: 'all'
+    assignedTo: 'all',
+    workflowId: 'all',
+    dependencyId: 'all',
+    team: 'all',
+    dateFrom: '',
+    dateTo: ''
   });
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
@@ -80,6 +93,12 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
       // Load users
       const userData = loadUsersFromStorage();
       setUsers(userData);
+      
+      // Load workflows and dependencies
+      const workflowsData = WorkflowService.getAllWorkflows();
+      const dependenciesData = UserDependencyService.getAllUserDependencies();
+      setWorkflows(workflowsData);
+      setDependencies(dependenciesData);
       
       // Load statistics
       const stats = TaskService.getStatistics();
@@ -606,16 +625,72 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
           )}
         </div>
         
-        {/* Filters and Actions Bar */}
+        {/* Tabs */}
         <div className={`rounded-2xl shadow-xl border overflow-hidden mb-8 ${
           isDarkMode 
             ? 'bg-slate-800 border-slate-700' 
             : 'bg-white border-gray-100'
         }`}>
-          {/* Main Controls */}
-          <div className={`p-6 border-b ${
-            isDarkMode ? 'border-slate-700' : 'border-gray-100'
+          <div className="flex gap-2 p-2 border-b-2 border-gray-700">
+            <button
+              onClick={() => setActiveTab('all-tasks')}
+              className={`flex-1 px-6 py-3 font-semibold transition-colors border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'all-tasks'
+                  ? isDarkMode
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-blue-600 text-blue-600'
+                  : isDarkMode
+                  ? 'border-transparent text-gray-400 hover:text-white'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <CheckSquare size={20} />
+              All Tasks ({tasks.filter(t => !t.workflowId).length})
+            </button>
+            <button
+              onClick={() => setActiveTab('workflows')}
+              className={`flex-1 px-6 py-3 font-semibold transition-colors border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'workflows'
+                  ? isDarkMode
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-blue-600 text-blue-600'
+                  : isDarkMode
+                  ? 'border-transparent text-gray-400 hover:text-white'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <GitBranch size={20} />
+              Task Dependencies ({tasks.filter(t => t.workflowId).length})
+            </button>
+            <button
+              onClick={() => setActiveTab('statistics')}
+              className={`flex-1 px-6 py-3 font-semibold transition-colors border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'statistics'
+                  ? isDarkMode
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-blue-600 text-blue-600'
+                  : isDarkMode
+                  ? 'border-transparent text-gray-400 hover:text-white'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <BarChart3 size={20} />
+              Statistics
+            </button>
+          </div>
+        </div>
+
+        {/* Filters and Actions Bar - Only show for All Tasks */}
+        {activeTab === 'all-tasks' && (
+          <div className={`rounded-2xl shadow-xl border overflow-hidden mb-8 ${
+            isDarkMode 
+              ? 'bg-slate-800 border-slate-700' 
+              : 'bg-white border-gray-100'
           }`}>
+            {/* Main Controls */}
+            <div className={`p-6 border-b ${
+              isDarkMode ? 'border-slate-700' : 'border-gray-100'
+            }`}>
             <div className="flex flex-col lg:flex-row gap-4">
               {/* Search */}
               <div className="flex-1 relative">
@@ -695,11 +770,11 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
                 </button>
               </div>
             </div>
-          </div>
-          
+            </div>
+            
           {/* Advanced Filters */}
           <div className="p-6">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {/* Status Filter */}
               <div className="space-y-2">
                 <label className={`text-xs font-semibold uppercase tracking-wide ${
@@ -794,6 +869,52 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
                 </select>
               </div>
               
+              {/* Workflow Filter */}
+              <div className="space-y-2">
+                <label className={`text-xs font-semibold uppercase tracking-wide ${
+                  isDarkMode ? 'text-slate-400' : 'text-gray-500'
+                }`}>
+                  Task Dependency
+                </label>
+                <select
+                  value={filters.workflowId}
+                  onChange={(e) => setFilters({...filters, workflowId: e.target.value})}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 text-white focus:bg-slate-600' 
+                      : 'bg-gray-50 border-gray-200 focus:bg-white'
+                  }`}
+                >
+                  <option value="all">All Task Dependencies</option>
+                  {workflows.map(workflow => (
+                    <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* User Dependency Filter */}
+              <div className="space-y-2">
+                <label className={`text-xs font-semibold uppercase tracking-wide ${
+                  isDarkMode ? 'text-slate-400' : 'text-gray-500'
+                }`}>
+                  User Dependency
+                </label>
+                <select
+                  value={filters.dependencyId}
+                  onChange={(e) => setFilters({...filters, dependencyId: e.target.value})}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 text-white focus:bg-slate-600' 
+                      : 'bg-gray-50 border-gray-200 focus:bg-white'
+                  }`}
+                >
+                  <option value="all">All Dependencies</option>
+                  {dependencies.map(dep => (
+                    <option key={dep.id} value={dep.id}>{dep.name}</option>
+                  ))}
+                </select>
+              </div>
+              
               {/* Sort */}
               <div className="space-y-2">
                 <label className={`text-xs font-semibold uppercase tracking-wide ${
@@ -816,6 +937,44 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
                   <option value="status">Status</option>
                   <option value="title">Title</option>
                 </select>
+              </div>
+            </div>
+            
+            {/* Date Range Filters - Second Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="space-y-2">
+                <label className={`text-xs font-semibold uppercase tracking-wide ${
+                  isDarkMode ? 'text-slate-400' : 'text-gray-500'
+                }`}>
+                  Created From
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 text-white focus:bg-slate-600' 
+                      : 'bg-gray-50 border-gray-200 focus:bg-white'
+                  }`}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={`text-xs font-semibold uppercase tracking-wide ${
+                  isDarkMode ? 'text-slate-400' : 'text-gray-500'
+                }`}>
+                  Created To
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 text-white focus:bg-slate-600' 
+                      : 'bg-gray-50 border-gray-200 focus:bg-white'
+                  }`}
+                />
               </div>
             </div>
           </div>
@@ -862,9 +1021,10 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
         
-        {/* Task Form Modal */}
+        {/* Task Form Modal - Always visible */}
         {showTaskForm && (
           <TaskForm
             task={editingTask}
@@ -880,7 +1040,14 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
         )}
         
         {/* Tasks Display */}
-        {filteredTasks.length === 0 ? (
+        {activeTab === 'workflows' ? (
+          <TaskWorkflowView 
+            tasks={tasks}
+            categories={categories}
+            users={users}
+            isDarkMode={isDarkMode}
+          />
+        ) : activeTab === 'all-tasks' && filteredTasks.length === 0 ? (
           <div className={`rounded-2xl shadow-xl border overflow-hidden ${
             isDarkMode 
               ? 'bg-slate-800 border-slate-700' 
@@ -952,7 +1119,7 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
               {/* Quick Stats */}
               {tasks.length > 0 && (
                 <div className={`mt-12 pt-8 border-t ${
-                  isDarkMode ? 'border-slate-700' : 'border-gray-100'
+isDarkMode ? 'border-slate-700' : 'border-gray-100'
                 }`}>
                   <p className={`text-sm mb-4 ${
                     isDarkMode ? 'text-slate-400' : 'text-gray-500'
@@ -981,7 +1148,7 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
               )}
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'all-tasks' ? (
           <>
             {/* Card View */}
             {viewMode === 'card' && (
@@ -1103,7 +1270,7 @@ const TaskPage = ({ isDarkMode, onToggleDarkMode }) => {
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
       {/* Worksheet Submission Viewer Modal */}

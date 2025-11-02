@@ -462,11 +462,13 @@
 // components/TaskForm.jsx - Task Form with Worksheet Template Selection
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Save, AlertCircle, FileText, CheckCircle, Folder, Search, ArrowRight, ChevronDown, BookOpen, ListTodo } from 'lucide-react';
+import { X, Save, AlertCircle, FileText, CheckCircle, Folder, Search, ArrowRight, ChevronDown, BookOpen, ListTodo, Workflow as WorkflowIcon } from 'lucide-react';
 import UserIdResolver from '../user/UserIdResolver';
 import WorksheetService from '../../services/WorksheetService';
 import GuidelineService from '../../services/GuidelineService';
 import ChecklistService from '../../services/ChecklistService';
+import WorkflowService from '../../services/workflowService';
+import UserDependencyService from '../../services/userDependencyService';
 const TaskForm = ({ 
   task = null, 
   categories = [], 
@@ -485,7 +487,9 @@ const TaskForm = ({
     status: 'pending',
     dueDate: '',
     estimatedHours: '',
-    tags: ''
+    tags: '',
+    workflowId: '',
+    userDependencyId: ''
   });
 
   const [errors, setErrors] = useState({});
@@ -502,6 +506,11 @@ const TaskForm = ({
   const [hasGuideline, setHasGuideline] = useState(false);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [hasChecklist, setHasChecklist] = useState(false);
+
+  // Workflow states
+  const [workflows, setWorkflows] = useState([]);
+  const [userDependencies, setUserDependencies] = useState([]);
+  const [filteredDependencies, setFilteredDependencies] = useState([]);
 
   // Category dropdown states
   const [categorySearch, setCategorySearch] = useState('');
@@ -606,6 +615,47 @@ const TaskForm = ({
       setHasChecklist(false);
     }
   };
+
+  // Load workflows and dependencies
+  useEffect(() => {
+    const allWorkflows = WorkflowService.getAllWorkflows();
+    setWorkflows(allWorkflows);
+    
+    const allDependencies = UserDependencyService.getAllUserDependencies();
+    setUserDependencies(allDependencies);
+  }, []);
+
+  // Filter dependencies when workflow is selected
+  useEffect(() => {
+    if (formData.workflowId) {
+      const filtered = userDependencies.filter(dep => dep.workflowId === formData.workflowId);
+      setFilteredDependencies(filtered);
+      
+      // Clear dependency if it doesn't belong to selected workflow
+      if (formData.userDependencyId && !filtered.some(dep => dep.id === formData.userDependencyId)) {
+        setFormData(prev => ({ ...prev, userDependencyId: '' }));
+      }
+    } else {
+      setFilteredDependencies([]);
+      setFormData(prev => ({ ...prev, userDependencyId: '' }));
+    }
+  }, [formData.workflowId, userDependencies]);
+
+  // Auto-fill first stage when dependency is selected
+  useEffect(() => {
+    if (formData.userDependencyId && !task) { // Only auto-fill when creating (not editing)
+      const dependency = userDependencies.find(dep => dep.id === formData.userDependencyId);
+      if (dependency && dependency.stageAssignments.length > 0) {
+        const firstStage = dependency.stageAssignments[0];
+        setFormData(prev => ({
+          ...prev,
+          categoryId: firstStage.categoryId,
+          assignedTo: firstStage.userId,
+          checkerId: firstStage.checkerId
+        }));
+      }
+    }
+  }, [formData.userDependencyId, userDependencies]);
 
   // ==========================================
   // USER FILTERING BY CATEGORY
@@ -948,6 +998,18 @@ const TaskForm = ({
       }
     }
     
+    // Get workflow and dependency info if selected
+    let workflowName = null;
+    let dependencyName = null;
+    if (formData.workflowId) {
+      const workflow = workflows.find(w => w.id === formData.workflowId);
+      workflowName = workflow?.name || null;
+    }
+    if (formData.userDependencyId) {
+      const dependency = userDependencies.find(d => d.id === formData.userDependencyId);
+      dependencyName = dependency?.name || null;
+    }
+
     const taskData = {
       title: formData.title,
       description: formData.description,
@@ -963,7 +1025,13 @@ const TaskForm = ({
       tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [],
       dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
       hasWorksheet: hasWorksheet,
-      worksheetTemplateId: selectedTemplate?.id || null
+      worksheetTemplateId: selectedTemplate?.id || null,
+      // Workflow fields
+      workflowId: formData.workflowId || null,
+      workflowName: workflowName,
+      userDependencyId: formData.userDependencyId || null,
+      userDependencyName: dependencyName,
+      currentStage: 0 // Will be set to 1 in TaskService if workflow is selected
     };
     
     console.log('✅ Final task data:', {
@@ -1121,6 +1189,69 @@ const TaskForm = ({
               />
             </div>
             
+            {/* Task Dependency Selection (Optional) */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <WorkflowIcon size={18} className="text-blue-600" />
+                <h3 className="text-sm font-semibold text-blue-900">
+                  Task Dependency (Optional)
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Task Dependency Selection */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Select Task Dependency
+                  </label>
+                  <select
+                    value={formData.workflowId}
+                    onChange={(e) => handleChange('workflowId', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">No Task Dependency (Direct Assignment)</option>
+                    {workflows.map(workflow => (
+                      <option key={workflow.id} value={workflow.id}>
+                        {workflow.name} ({workflow.categoryFlow.length} stages)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* User Dependency Selection */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Select User Dependency
+                  </label>
+                  <select
+                    value={formData.userDependencyId}
+                    onChange={(e) => handleChange('userDependencyId', e.target.value)}
+                    disabled={!formData.workflowId}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {formData.workflowId ? 'Select Dependency...' : 'Select task dependency first'}
+                    </option>
+                    {filteredDependencies.map(dep => (
+                      <option key={dep.id} value={dep.id}>
+                        {dep.name}
+                      </option>
+                    ))}
+                  </select>
+                  {formData.workflowId && filteredDependencies.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No dependencies available for this task dependency
+                    </p>
+                  )}
+                  {formData.userDependencyId && (
+                    <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
+                      <CheckCircle size={12} />
+                      Will auto-assign users from first stage
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Category Selection - Hierarchical Dropdown */}
             <div className="relative" ref={categoryDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2">

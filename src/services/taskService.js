@@ -1,5 +1,7 @@
 import { StorageService } from "./storageService";
 import { UserIdResolver } from "../components/user/UserIdResolver";
+import UserDependencyService from "./userDependencyService";
+import WorkflowService from "./workflowService";
 
 // Task statuses
 export const TASK_STATUS = {
@@ -99,6 +101,14 @@ const TaskService = {
         approvedBy: null,
         approvedAt: null,
         revisedCount: 0,
+        // Workflow fields
+        workflowId: taskData.workflowId || null,
+        workflowName: taskData.workflowName || null,
+        userDependencyId: taskData.userDependencyId || null,
+        userDependencyName: taskData.userDependencyName || null,
+        currentStage: taskData.currentStage !== undefined ? taskData.currentStage : 0,
+        stageHistory: taskData.stageHistory || [],
+        isWorkflowComplete: false,
         createdAt: now,
         updatedAt: now,
         createdBy: taskData.createdBy || 'system',
@@ -107,10 +117,34 @@ const TaskService = {
           action: 'created',
           timestamp: now,
           performedBy: taskData.createdBy || 'system',
-          details: `Task created${taskData.hasWorksheet ? ' with worksheet template' : ''}`
+          details: `Task created${taskData.hasWorksheet ? ' with worksheet template' : ''}${taskData.workflowId ? ' with workflow' : ''}`
         }]
       };
 
+      // If workflow task, initialize stage history
+      if (newTask.workflowId && newTask.userDependencyId && newTask.currentStage === 0) {
+        // Get first stage assignment
+        const firstStage = UserDependencyService.getStageAssignment(newTask.userDependencyId, 1);
+        if (firstStage) {
+          newTask.currentStage = 1;
+          newTask.categoryId = firstStage.categoryId;
+          newTask.categoryPath = firstStage.categoryName;
+          newTask.assignedTo = firstStage.userId;
+          newTask.assignedToName = firstStage.userName;
+          newTask.checkerId = firstStage.checkerId;
+          newTask.checkerName = firstStage.checkerName;
+          
+          // Initialize stage history
+          newTask.stageHistory = [];
+          
+          // Increment dependency usage
+          UserDependencyService.incrementTaskCount(newTask.userDependencyId);
+          
+          // Increment workflow usage
+          WorkflowService.incrementTaskCount(newTask.workflowId);
+        }
+      }
+      
       tasks.push(newTask);
       saveTasks();
       
@@ -121,7 +155,9 @@ const TaskService = {
         checkerId: newTask.checkerId,
         checkerName: newTask.checkerName,
         hasWorksheet: newTask.hasWorksheet,
-        worksheetTemplateId: newTask.worksheetTemplateId
+        worksheetTemplateId: newTask.worksheetTemplateId,
+        workflowId: newTask.workflowId,
+        currentStage: newTask.currentStage
       });
       
       return { 
@@ -309,6 +345,29 @@ const TaskService = {
     if (filters.assignedTo && filters.assignedTo !== 'all') {
       const searchId = String(filters.assignedTo);
       filteredTasks = filteredTasks.filter(task => String(task.assignedTo) === searchId);
+    }
+
+    // Filter by workflow
+    if (filters.workflowId && filters.workflowId !== 'all') {
+      filteredTasks = filteredTasks.filter(task => task.workflowId === filters.workflowId);
+    }
+
+    // Filter by dependency
+    if (filters.dependencyId && filters.dependencyId !== 'all') {
+      filteredTasks = filteredTasks.filter(task => task.userDependencyId === filters.dependencyId);
+    }
+
+    // Filter by creation date
+    if (filters.dateFrom) {
+      filteredTasks = filteredTasks.filter(task => 
+        task.createdAt && new Date(task.createdAt) >= new Date(filters.dateFrom)
+      );
+    }
+
+    if (filters.dateTo) {
+      filteredTasks = filteredTasks.filter(task => 
+        task.createdAt && new Date(task.createdAt) <= new Date(filters.dateTo)
+      );
     }
 
     if (filters.dueDateFrom) {
@@ -696,8 +755,9 @@ const TaskService = {
 
   /**
    * Admin reviews and approves task
+   * Handles workflow handoff if task is part of a workflow
    */
-  approveTask: (taskId, adminId, adminFeedback = null) => {
+  approveTask: (taskId, adminId, adminFeedback = null, outputData = null) => {
     try {
       const taskIndex = tasks.findIndex(t => t.id === taskId);
       
@@ -708,38 +768,178 @@ const TaskService = {
       const now = new Date().toISOString();
       const task = tasks[taskIndex];
       
-      tasks[taskIndex] = {
-        ...task,
-        status: TASK_STATUS.APPROVED,
-        updatedAt: now,
-        updatedBy: adminId,
-        approvedBy: adminId,
-        approvedAt: now,
-        review: {
-          ...task.review,
-          reviewedAt: now,
-          reviewedBy: adminId,
-          approved: true,
-          adminFeedback: adminFeedback
-        },
-        logs: [
-          ...(task.logs || []),
-          {
-            action: 'approved',
-            timestamp: now,
-            performedBy: adminId,
-            details: 'Task approved by admin'
+      // Check if task is part of a workflow
+      if (task.workflowId && task.userDependencyId) {
+        // Get current stage assignment
+        const currentStageAssignment = UserDependencyService.getStageAssignment(
+          task.userDependencyId,
+          task.currentStage
+        );
+        
+        // Save current stage output
+        const currentStageHistory = {
+          stageOrder: task.currentStage,
+          categoryId: task.categoryId,
+          categoryName: task.categoryPath.split(' > ').pop() || '',
+          userId: task.assignedTo,
+          userName: task.assignedToName,
+          checkerId: adminId,
+          checkerName: currentStageAssignment?.checkerName || '',
+          status: 'approved',
+          inputData: task.stageHistory.length > 0 
+            ? task.stageHistory[task.stageHistory.length - 1].outputData 
+            : null,
+          outputData: outputData || task.review?.submissionData || null,
+          approvedAt: now,
+          approvedBy: adminId
+        };
+        
+        const updatedStageHistory = [...(task.stageHistory || []), currentStageHistory];
+        
+        // Check if this is the last stage
+        const isLastStage = UserDependencyService.isLastStage(
+          task.userDependencyId,
+          task.currentStage
+        );
+        
+        if (isLastStage) {
+          // Mark workflow as complete
+          tasks[taskIndex] = {
+            ...task,
+            status: TASK_STATUS.COMPLETED,
+            updatedAt: now,
+            updatedBy: adminId,
+            approvedBy: adminId,
+            approvedAt: now,
+            completedDate: now,
+            isWorkflowComplete: true,
+            currentStage: task.currentStage,
+            stageHistory: updatedStageHistory,
+            review: {
+              ...task.review,
+              reviewedAt: now,
+              reviewedBy: adminId,
+              approved: true,
+              adminFeedback: adminFeedback
+            },
+            logs: [
+              ...(task.logs || []),
+              {
+                action: 'workflow_completed',
+                timestamp: now,
+                performedBy: adminId,
+                details: `Workflow completed at stage ${task.currentStage}`
+              }
+            ]
+          };
+          
+          saveTasks();
+          
+          return { 
+            success: true, 
+            task: tasks[taskIndex],
+            message: 'Workflow completed successfully',
+            isWorkflowComplete: true
+          };
+        } else {
+          // Move to next stage
+          const nextStage = UserDependencyService.getNextStage(
+            task.userDependencyId,
+            task.currentStage
+          );
+          
+          if (!nextStage) {
+            return { 
+              success: false, 
+              message: 'Next stage assignment not found' 
+            };
           }
-        ]
-      };
+          
+          // Update task for next stage
+          tasks[taskIndex] = {
+            ...task,
+            status: TASK_STATUS.PENDING,
+            updatedAt: now,
+            updatedBy: adminId,
+            categoryId: nextStage.categoryId,
+            categoryPath: nextStage.categoryName, // Update path if needed
+            assignedTo: nextStage.userId,
+            assignedToName: nextStage.userName,
+            checkerId: nextStage.checkerId,
+            checkerName: nextStage.checkerName,
+            currentStage: nextStage.stageOrder,
+            stageHistory: updatedStageHistory,
+            review: null, // Reset review for next stage
+            revisedCount: 0, // Reset revision count for new stage
+            logs: [
+              ...(task.logs || []),
+              {
+                action: 'stage_handoff',
+                timestamp: now,
+                performedBy: adminId,
+                details: `Task moved from stage ${task.currentStage} to stage ${nextStage.stageOrder}. Assigned to ${nextStage.userName}`
+              }
+            ]
+          };
+          
+          saveTasks();
+          
+          // Dispatch event for notifications
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('taskStageHandoff', {
+              detail: {
+                taskId: task.id,
+                previousStage: task.currentStage,
+                nextStage: nextStage.stageOrder,
+                assignedTo: nextStage.userId
+              }
+            }));
+          }
+          
+          return { 
+            success: true, 
+            task: tasks[taskIndex],
+            message: `Task moved to next stage and assigned to ${nextStage.userName}`,
+            isWorkflowComplete: false,
+            nextStage: nextStage
+          };
+        }
+      } else {
+        // Normal approval (non-workflow task)
+        tasks[taskIndex] = {
+          ...task,
+          status: TASK_STATUS.APPROVED,
+          updatedAt: now,
+          updatedBy: adminId,
+          approvedBy: adminId,
+          approvedAt: now,
+          review: {
+            ...task.review,
+            reviewedAt: now,
+            reviewedBy: adminId,
+            approved: true,
+            adminFeedback: adminFeedback
+          },
+          logs: [
+            ...(task.logs || []),
+            {
+              action: 'approved',
+              timestamp: now,
+              performedBy: adminId,
+              details: 'Task approved by admin'
+            }
+          ]
+        };
 
-      saveTasks();
-      
-      return { 
-        success: true, 
-        task: tasks[taskIndex],
-        message: 'Task approved successfully' 
-      };
+        saveTasks();
+        
+        return { 
+          success: true, 
+          task: tasks[taskIndex],
+          message: 'Task approved successfully',
+          isWorkflowComplete: false
+        };
+      }
     } catch (error) {
       console.error('Error approving task:', error);
       return { 

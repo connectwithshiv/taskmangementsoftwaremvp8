@@ -349,6 +349,7 @@ import TaskPage from './pages/TasksPage';
 import WorksheetPage from './pages/WorksheetPage';
 import GuidelinePage from './pages/GuidelinePage';
 import ChecklistPage from './pages/ChecklistPage';
+import WorkflowPage from './pages/WorkflowPage';
 import UserApp from './components/user/Userapp';
 import CheckerApp from './components/user/CheckerApp';
 import CategoryService from './services/categoryService';
@@ -557,6 +558,11 @@ const App = () => {
     // Guidelines Builder
     if (currentPage === 'guidelines') {
       return <GuidelinePage isDarkMode={isDarkMode} />;
+    }
+
+    // Workflow & Dependency Management
+    if (currentPage === 'workflows') {
+      return <WorkflowPage isDarkMode={isDarkMode} />;
     }
 
     // Checklist Builder
